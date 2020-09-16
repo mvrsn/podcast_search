@@ -1,6 +1,8 @@
 // Copyright (c) 2019, Ben Hills. Use of this source code is governed by a
 // MIT license that can be found in the LICENSE file.
 
+import 'dart:io';
+
 import 'package:podcast_search/podcast_search.dart';
 import 'package:test/test.dart';
 
@@ -15,6 +17,16 @@ void main() {
     test('Load invalid podcast - timeout', () async {
       await expectLater(() => Podcast.loadFeed(url: 'https://pc.files.bbci.co.uk/p06tqsg3.rss'),
           throwsA(const TypeMatcher<PodcastTimeoutException>()));
+    });
+
+    test('Load podcast and cache it', () async {
+      var podcast = await Podcast.loadFeed(
+        url: 'https://podcasts.files.bbci.co.uk/p06tqsg3.rss',
+        cacheDuration: Duration(seconds: 10),
+        cacheDirectory: Directory('${Directory.current.path}/test/cache')
+      );
+
+      expect(podcast.title, 'Forest 404');
     });
   });
 }

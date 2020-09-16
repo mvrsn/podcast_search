@@ -35,21 +35,16 @@ class Podcast {
   static Future<Podcast> loadFeed({
     @required String url,
     int timeout = 20000,
+    Duration cacheDuration,
+    Directory cacheDirectory
   }) async {
-    final client = Dio(
-      BaseOptions(
-        connectTimeout: timeout,
-        receiveTimeout: timeout,
-        headers: {
-          HttpHeaders.userAgentHeader: 'podcast_search Dart/1.0',
-        },
-      ),
-    );
-
     try {
-      final response = await client.get(url);
-
-      var rssFeed = RssFeed.parse(response.data);
+      var rssFeed = await _loadRssFeed(
+        url: url,
+        timeout: timeout,
+        cacheDuration: cacheDuration,
+        cacheDirectory: cacheDirectory,
+      );
 
       // Parse the episodes
       var episodes = <Episode>[];
@@ -77,6 +72,56 @@ class Podcast {
     }
 
     return Podcast._(url);
+  }
+
+  static Future<RssFeed> _loadRssFeed({
+    @required String url,
+    int timeout = 20000,
+    Duration cacheDuration,
+    Directory cacheDirectory
+  }) async {
+    final client = Dio(
+      BaseOptions(
+        connectTimeout: timeout,
+        receiveTimeout: timeout,
+        headers: {
+          HttpHeaders.userAgentHeader: 'podcast_search Dart/1.0',
+        },
+      ),
+    );
+
+    // If no cache duration is passed in, just load the feed normally
+    if (cacheDuration == null) {
+      final response = await client.get(url);
+
+      return RssFeed.parse(response.data);
+    }
+
+    final cacheFile = await _cacheFile(url: url, cacheDirectory: cacheDirectory);
+
+    print(cacheFile.path);
+
+    // If there is a cache file that has not expired, load it
+    if (cacheFile.existsSync() && cacheFile.lastModifiedSync().add(cacheDuration).isBefore(DateTime.now())) {
+      return RssFeed.parse(cacheFile.readAsStringSync());
+    }
+
+    final response = await client.get(url);
+
+    // Save feed in the cache
+    cacheFile.writeAsStringSync(response.data);
+
+    return RssFeed.parse(response.data);
+  }
+
+  static Future<File> _cacheFile({String url, Directory cacheDirectory}) async {
+    if (cacheDirectory.existsSync() == false) {
+      cacheDirectory.createSync();
+    }
+
+    final filename = url.split('://').last.replaceAll('/', '_');
+
+    return File('${cacheDirectory.path}/${filename}');
   }
 
   static void _loadEpisodes(RssFeed rssFeed, List<Episode> episodes) {
